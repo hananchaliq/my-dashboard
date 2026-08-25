@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 
 export default function CalendarWidget() {
    const [currentDate, setCurrentDate] = useState(new Date());
@@ -38,7 +38,8 @@ export default function CalendarWidget() {
    const nextMonthDaysCount = (7 - (totalSlots % 7)) % 7;
    const nextMonthDays = Array.from({ length: nextMonthDaysCount }, (_, i) => i + 1);
 
-   const variants = {
+   // Penambahan tipe Variants di sini untuk menghilangkan TypeScript error
+   const variants: Variants = {
       enter: (dir: number) => ({
          x: dir > 0 ? 20 : -20,
          opacity: 0,
