@@ -92,7 +92,7 @@ export default function Home() {
          {/* Floating Toolbar & Modals */}
          <FloatingToolbar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-         {isSettingsOpen && <SettingsOverlay settings={settings} onSave={setSettings} onClose={() => setIsSettingsOpen(false)} />}
+         {isSettingsOpen && <SettingsOverlay settings={settings} onSave={setSettings} />}
       </main>
    );
 }

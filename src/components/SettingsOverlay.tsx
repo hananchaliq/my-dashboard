@@ -7,10 +7,9 @@ import { Settings } from "@/types";
 interface SettingsOverlayProps {
   settings: Settings;
   onSave: (value: Settings | ((val: Settings) => Settings)) => void;
-  onClose: () => void; 
 }
 
-export default function SettingsOverlay({ settings, onSave, onClose }: SettingsOverlayProps) {
+export default function SettingsOverlay({ settings, onSave}: SettingsOverlayProps) {
    const [isOpen, setIsOpen] = useState(false);
    const [bgType, setBgType] = useState<"color" | "gradient" | "image">(settings.bgType || "color");
    const [bgValue, setBgValue] = useState(settings.bgValue || "#020617");
