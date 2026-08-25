@@ -38,7 +38,7 @@ export default function CalendarWidget() {
    const nextMonthDaysCount = (7 - (totalSlots % 7)) % 7;
    const nextMonthDays = Array.from({ length: nextMonthDaysCount }, (_, i) => i + 1);
 
-   // Penambahan tipe Variants di sini untuk menghilangkan TypeScript error
+   // Disesuaikan agar kompatibel penuh dengan Framer Motion & TS
    const variants: Variants = {
       enter: (dir: number) => ({
          x: dir > 0 ? 20 : -20,
@@ -49,13 +49,13 @@ export default function CalendarWidget() {
          x: 0,
          opacity: 1,
          scale: 1,
-         transition: { duration: 0.25, ease: "easeOut" },
+         transition: { duration: 0.25, ease: [0, 0, 0.2, 1] },
       },
       exit: (dir: number) => ({
          x: dir < 0 ? 20 : -20,
          opacity: 0,
          scale: 0.95,
-         transition: { duration: 0.15, ease: "easeIn" },
+         transition: { duration: 0.15, ease: [0.4, 0, 1, 1] },
       }),
    };
 
