@@ -38,8 +38,8 @@ export default function CalendarWidget() {
    const nextMonthDaysCount = (7 - (totalSlots % 7)) % 7;
    const nextMonthDays = Array.from({ length: nextMonthDaysCount }, (_, i) => i + 1);
 
-   // Disesuaikan agar kompatibel penuh dengan Framer Motion & TS
-   const variants: Variants = {
+   // Tipe ditambahkan as Variants agar TypeScript tidak komplain
+   const variants = {
       enter: (dir: number) => ({
          x: dir > 0 ? 20 : -20,
          opacity: 0,
@@ -57,7 +57,7 @@ export default function CalendarWidget() {
          scale: 0.95,
          transition: { duration: 0.15, ease: [0.4, 0, 1, 1] },
       }),
-   };
+   } as Variants;
 
    return (
       <div className="relative group overflow-hidden p-5 rounded-3xl bg-white/[0.04] border border-white/20 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] transition-all duration-500 hover:border-white/40 hover:shadow-[0_8px_32px_0_rgba(249,115,22,0.15)] h-full flex flex-col justify-between w-full">
