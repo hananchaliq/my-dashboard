@@ -60,15 +60,15 @@ export default function Home() {
          {/* Background Overlay untuk image mode */}
          {activeSettings.bgType === "image" && <div className="fixed inset-0 bg-black/75 pointer-events-none z-0" />}
 
-         {/* Main Container Wrapper dengan Efek Scale-Down saat Drawer Buka */}
+         {/* Main Container Wrapper */}
          <motion.div
             style={getBackgroundStyle()}
             animate={{
-               scale: 1, 
-               borderRadius: "0px", 
+               scale: 1,
+               borderRadius: "0px",
             }}
             transition={{ duration: 0.2 }}
-            className="min-h-screen w-full p-4 space-y-4 relative z-10 origin-center transition-all duration-300 selection:bg-orange-500 selection:text-white">
+            className="min-h-screen w-full p-4 space-y-4 relative z-10 origin-center transition-all duration-300 selection:bg-orange-500 selection:text-white font-sans">
             <div className="w-full space-y-4 max-w-[1600px] mx-auto">
                {/* Header Navigation */}
                <Navbar onOpenSettings={() => setIsSettingsOpen(true)} />
@@ -84,7 +84,7 @@ export default function Home() {
 
                   {/* KOLOM TENGAH & KANAN (9/12) */}
                   <div className="col-span-12 lg:col-span-9 space-y-4">
-                     {/* Baris Atas: Search & Links (8/12) + Kalender (4/12) */}
+                     {/* Baris Atas: Search & Links + Kalender */}
                      <div className="grid grid-cols-12 gap-4 items-stretch">
                         <div className="col-span-12 lg:col-span-8 h-full">
                            <SearchAndLinks />
@@ -117,7 +117,11 @@ export default function Home() {
          </motion.div>
 
          {/* Drawer Overlay Settings */}
-         <SettingsOverlay isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={activeSettings} onSave={setSettings} />
+         <SettingsOverlay
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onSave={(updated: Settings) => setSettings(updated)}
+         />
       </main>
    );
 }

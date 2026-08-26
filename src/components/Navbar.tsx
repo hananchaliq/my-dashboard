@@ -18,6 +18,7 @@ interface NavbarProps {
    onOpenGrid?: () => void;
    onToggleNotifications?: () => void;
    onProfileClick?: () => void;
+   onOpenSettings: () => void;
 }
 
 export default function Navbar({ userName = "Hanan", onEditMode, onOpenGrid, onToggleNotifications, onProfileClick }: NavbarProps) {

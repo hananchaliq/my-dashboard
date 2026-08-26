@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS: ExtendedSettings = {
 interface SettingsOverlayProps {
    isOpen: boolean;
    onClose: () => void;
+   onSave: (newSettings: Settings) => void;
 }
 
 const DEFAULT_PRESETS = [

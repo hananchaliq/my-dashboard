@@ -199,7 +199,10 @@ export default function WorkspaceGrid() {
            backgroundColor: isDark ? "#090d16" : "#ffffff",
         };
 
-   if (!isMounted) return null;
+   // Mencegah Hydration Mismatch di Halaman Home / Server-Side Rendering
+   if (!isMounted) {
+      return <div className="w-full h-[380px] rounded-3xl bg-white/5 animate-pulse border border-white/10" />;
+   }
 
    const totalPages = Math.ceil((groups.length + 1) / ITEMS_PER_SLIDE);
    const paginatedGroups = groups.slice(currentPage * ITEMS_PER_SLIDE, (currentPage + 1) * ITEMS_PER_SLIDE);
@@ -254,10 +257,11 @@ export default function WorkspaceGrid() {
       if (!inputLinkName.trim() || !inputLinkUrl.trim() || !activeGroupId) return;
 
       const formattedUrl = normalizeUrl(inputLinkUrl);
+      const uniqueId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `l-${Date.now()}`;
 
       if (modalType === "addLink") {
          const newLink: LinkItem = {
-            id: crypto.randomUUID(),
+            id: uniqueId,
             name: inputLinkName,
             url: formattedUrl,
          };
