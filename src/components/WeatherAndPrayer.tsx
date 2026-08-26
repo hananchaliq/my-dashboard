@@ -3,6 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import { Sun, CloudSun, Cloud, CloudRain, Moon, CloudMoon, Building2 } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { Settings } from "@/types";
+
+interface ExtendedSettings extends Partial<Settings> {
+   enableLiquidGlass?: boolean;
+   glassOpacity?: number;
+   glassBlur?: number;
+}
 
 interface HourlyForecast {
    time: string;
@@ -34,7 +43,6 @@ interface LocationInfo {
    subregion: string;
 }
 
-// Konversi WMO Code dari Open-Meteo ke Teks & Ikon
 const getWeatherDetails = (code: number, isDay: number = 1) => {
    if (code === 0) {
       return {
@@ -72,6 +80,10 @@ const getWeatherDetails = (code: number, isDay: number = 1) => {
 };
 
 export default function WeatherAndPrayer() {
+   const { resolvedTheme, theme } = useTheme();
+   const [settings] = useLocalStorage<ExtendedSettings>("app_settings", {});
+   const [isMounted, setIsMounted] = useState(false);
+
    const [location, setLocation] = useState<LocationInfo>({
       lat: -8.8383,
       lng: 121.6521,
@@ -83,7 +95,11 @@ export default function WeatherAndPrayer() {
    const [activePrayer, setActivePrayer] = useState<string>("");
    const [loading, setLoading] = useState(true);
 
-   // 1. Ambil Koordinat Asli via Geolocation API & Reverse Geocoding
+   useEffect(() => {
+      setIsMounted(true);
+   }, []);
+
+   // 1. Ambil Koordinat Asli via Geolocation API
    useEffect(() => {
       if ("geolocation" in navigator) {
          navigator.geolocation.getCurrentPosition(
@@ -99,18 +115,13 @@ export default function WeatherAndPrayer() {
                   const cityName = addr.city || addr.town || addr.county || addr.regency || addr.village || "Lokasi Anda";
                   const stateName = addr.state ? `${addr.state}, Indonesia` : "Indonesia";
 
-                  setLocation({
-                     lat,
-                     lng,
-                     city: cityName,
-                     subregion: stateName,
-                  });
+                  setLocation({ lat, lng, city: cityName, subregion: stateName });
                } catch {
                   setLocation({ lat, lng, city: "Lokasi Anda", subregion: "Indonesia" });
                }
             },
             error => {
-               console.warn("Akses GPS tidak diizinkan / gagal. Menggunakan default Ende:", error);
+               console.warn("Akses GPS gagal. Menggunakan default Ende:", error);
                setLocation({
                   lat: -8.8383,
                   lng: 121.6521,
@@ -123,13 +134,12 @@ export default function WeatherAndPrayer() {
       }
    }, []);
 
-   // 2. Fetch Data Cuaca & Jadwal Sholat Berdasarkan Koordinat
+   // 2. Fetch Data Cuaca & Jadwal Sholat
    useEffect(() => {
       async function fetchData() {
          try {
             setLoading(true);
 
-            // Fetch Open-Meteo
             const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lng}&current_weather=true&hourly=temperature_2m,weathercode,is_day&timezone=auto`);
             const weatherData = await weatherRes.json();
 
@@ -170,7 +180,6 @@ export default function WeatherAndPrayer() {
                chartData,
             });
 
-            // Fetch Aladhan Sholat API
             const prayerRes = await fetch(`https://api.aladhan.com/v1/timings?latitude=${location.lat}&longitude=${location.lng}&method=20`);
             const prayerData = await prayerRes.json();
             const timings = prayerData.data.timings;
@@ -185,10 +194,8 @@ export default function WeatherAndPrayer() {
 
             setPrayers(mappedPrayers);
 
-            // Tentukan Waktu Sholat Terdekat / Aktif
             const now = new Date();
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
             const timeToMinutes = (tStr: string) => {
                const [h, m] = tStr.split(":").map(Number);
                return h * 60 + m;
@@ -215,57 +222,80 @@ export default function WeatherAndPrayer() {
       fetchData();
    }, [location]);
 
+   const currentTheme = resolvedTheme || theme || "dark";
+   const isDark = currentTheme === "dark";
+
+   // Konfigurasi Dynamic Glass Styling yang persis sama dengan DailyNotes
+   const enableLiquidGlass = settings?.enableLiquidGlass ?? true;
+   const opacityVal = (settings?.glassOpacity ?? 40) / 100;
+   const glassBlur = settings?.glassBlur ?? 12;
+
+   const containerGlassStyle: React.CSSProperties = enableLiquidGlass
+      ? {
+           backgroundColor: isDark ? `rgba(9, 13, 22, ${opacityVal})` : `rgba(255, 255, 255, ${Math.max(opacityVal, 0.45)})`,
+           backdropFilter: `blur(${glassBlur}px) saturate(180%)`,
+           WebkitBackdropFilter: `blur(${glassBlur}px) saturate(180%)`,
+        }
+      : {
+           backgroundColor: isDark ? "#090d16" : "#ffffff",
+        };
+
+   if (!isMounted) return null;
+
    const weatherDetails = weather ? getWeatherDetails(weather.code, weather.isDay) : null;
 
    return (
       <div className="flex flex-col gap-4 w-full max-w-md mx-auto font-sans">
-         {/* 1. CARD CUACA (Liquid Glass) */}
-         <div className="group relative p-5 rounded-2xl bg-white/[0.04] border border-white/20 backdrop-blur-2xl text-slate-200 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] flex flex-col justify-between overflow-hidden transition-all duration-500 hover:border-white/40">
-            {/* Refleksi Kaca Cair Top (Liquid Glass Reflection) */}
-            <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent rounded-t-2xl pointer-events-none" />
+         {/* 1. CARD CUACA */}
+         <div style={containerGlassStyle} className={`group relative p-5 rounded-3xl border shadow-2xl flex flex-col justify-between overflow-hidden transition-colors duration-300 ${isDark ? "border-white/15 text-slate-100" : "border-slate-200 text-slate-800"}`}>
+            {/* Ambient Glow Gradient Header */}
+            <div className={`absolute top-0 left-0 right-0 h-32 rounded-t-3xl pointer-events-none ${isDark ? "bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" : "bg-gradient-to-b from-orange-500/10 via-amber-500/[0.02] to-transparent"}`} />
 
-            {/* Ambient Glow */}
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/15 rounded-full blur-2xl pointer-events-none group-hover:bg-amber-500/25 transition-all duration-700" />
-            <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+            {/* Ambient Glow Corner */}
+            <div className={`absolute -top-12 -right-12 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-all duration-700 ${isDark ? "bg-orange-500/10 group-hover:bg-orange-500/20" : "bg-orange-400/20 group-hover:bg-orange-400/30"}`} />
+            <div className={`absolute -bottom-12 -left-12 w-44 h-44 rounded-full blur-3xl pointer-events-none ${isDark ? "bg-amber-500/10" : "bg-amber-400/15"}`} />
 
             <div className="relative z-10">
-               <h3 className="text-base font-semibold text-white drop-shadow-sm">Cuaca</h3>
-               <p className="text-xs text-slate-300/80 mt-0.5">
-                  {location.city}, {location.subregion}
-               </p>
-
-               <div className="flex items-center space-x-3 mt-4">
+               <div className="flex items-center justify-between">
+                  <div>
+                     <h3 className={`text-sm font-bold tracking-wide ${isDark ? "text-white" : "text-slate-900"}`}>{location.city}</h3>
+                     <p className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{location.subregion}</p>
+                  </div>
                   {weatherDetails?.icon}
-                  <span className="text-4xl font-bold tracking-tight text-white drop-shadow-md">{loading ? "--" : weather?.temp}°C</span>
                </div>
-               <p className="text-xs font-medium text-slate-200 mt-1">{weatherDetails?.text || "Memuat..."}</p>
+
+               <div className="flex items-baseline space-x-1 mt-4">
+                  <span className={`text-4xl font-bold tracking-tight drop-shadow-md ${isDark ? "text-white" : "text-slate-900"}`}>{loading ? "--" : weather?.temp}</span>
+                  <span className={`text-sm font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>°C</span>
+               </div>
+               <p className={`text-xs font-medium mt-1 ${isDark ? "text-slate-200" : "text-slate-700"}`}>Kondisi: {weatherDetails?.text || "Memuat..."}</p>
             </div>
 
-            {/* Prediksi Jam ke Depan */}
+            {/* Mini Grid 6 Jam */}
             <div className="mt-6 relative z-10">
-               <p className="text-xs text-slate-300/80 font-medium mb-2.5">Prediksi 12 Jam ke Depan</p>
+               <p className={`text-xs font-medium mb-2.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Prediksi 6 Jam ke Depan</p>
                <div className="grid grid-cols-6 gap-1.5">
                   {weather?.hourly.map((h, i) => {
                      const details = getWeatherDetails(h.code, h.isDay);
                      return (
-                        <div key={i} className="bg-white/10 border border-white/15 rounded-xl py-2 px-1 flex flex-col items-center justify-between text-center min-h-[72px] backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] hover:bg-white/20 transition-all">
-                           <span className="text-[10px] text-slate-300 font-mono">{h.time}</span>
+                        <div key={i} className={`border rounded-xl py-2 px-1 flex flex-col items-center justify-between text-center min-h-[72px] backdrop-blur-md transition-all ${isDark ? "bg-white/5 border-white/10 hover:bg-white/10 text-slate-100" : "bg-black/5 border-black/10 hover:bg-black/10 text-slate-800"}`}>
+                           <span className={`text-[10px] font-mono ${isDark ? "text-slate-400" : "text-slate-500"}`}>{h.time}</span>
                            <div className="my-1">{details.smallIcon}</div>
-                           <span className="text-xs font-semibold text-white">{h.temp}°C</span>
+                           <span className="text-xs font-semibold">{h.temp}°C</span>
                         </div>
                      );
                   }) ||
                      Array(6)
                         .fill(0)
                         .map((_, i) => (
-                           <div key={i} className="bg-white/5 border border-white/10 rounded-xl py-2 px-1 text-center text-xs text-slate-400 backdrop-blur-md">
+                           <div key={i} className={`border rounded-xl py-2 px-1 text-center text-xs backdrop-blur-md min-h-[72px] flex items-center justify-center ${isDark ? "bg-white/5 border-white/10 text-slate-500" : "bg-black/5 border-black/10 text-slate-400"}`}>
                               --
                            </div>
                         ))}
                </div>
             </div>
 
-            {/* Grafik Temperatur Recharts */}
+            {/* Grafik Temperatur */}
             <div className="h-28 w-full mt-4 -mb-2 relative z-10">
                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={weather?.chartData || []} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
@@ -275,37 +305,37 @@ export default function WeatherAndPrayer() {
                            <stop offset="95%" stopColor="#f97316" stopOpacity={0.0} />
                         </linearGradient>
                      </defs>
-                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: "#cbd5e1", fontSize: 10 }} interval="preserveStartEnd" />
-                     <YAxis domain={["dataMin - 2", "dataMax + 2"]} axisLine={false} tickLine={false} tick={{ fill: "#cbd5e1", fontSize: 10 }} />
+                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: isDark ? "#94a3b8" : "#64748b", fontSize: 10 }} interval="preserveStartEnd" />
+                     <YAxis domain={["dataMin - 2", "dataMax + 2"]} axisLine={false} tickLine={false} tick={{ fill: isDark ? "#94a3b8" : "#64748b", fontSize: 10 }} />
                      <Tooltip
                         contentStyle={{
-                           backgroundColor: "rgba(15, 20, 32, 0.85)",
-                           borderColor: "rgba(255, 255, 255, 0.2)",
+                           backgroundColor: isDark ? "rgba(9, 13, 22, 0.85)" : "rgba(255, 255, 255, 0.95)",
+                           borderColor: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)",
                            backdropFilter: "blur(12px)",
                            borderRadius: "0.75rem",
                            fontSize: "11px",
-                           color: "#f8fafc",
-                           boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5)",
+                           color: isDark ? "#f8fafc" : "#0f172a",
+                           boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
                         }}
                         formatter={(value: any) => [`${value}°C`, "Suhu"]}
                      />
-                     <Area type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp)" isAnimationActive={false} />
+                     <Area type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp)" isAnimationActive={true} />
                   </AreaChart>
                </ResponsiveContainer>
             </div>
          </div>
 
-         {/* 2. CARD WAKTU SHOLAT (Liquid Glass) */}
-         <div className="group relative p-5 rounded-2xl bg-white/[0.04] border border-white/20 backdrop-blur-2xl text-slate-200 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] overflow-hidden transition-all duration-500 hover:border-white/40">
-            {/* Refleksi Kaca Cair Top (Liquid Glass Reflection) */}
-            <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/15 to-transparent rounded-t-2xl pointer-events-none" />
+         {/* 2. CARD WAKTU SHOLAT */}
+         <div style={containerGlassStyle} className={`group relative p-5 rounded-3xl border shadow-2xl overflow-hidden transition-colors duration-300 ${isDark ? "border-white/15 text-slate-100" : "border-slate-200 text-slate-800"}`}>
+            {/* Ambient Glow Gradient Header */}
+            <div className={`absolute top-0 left-0 right-0 h-32 rounded-t-3xl pointer-events-none ${isDark ? "bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" : "bg-gradient-to-b from-orange-500/10 via-amber-500/[0.02] to-transparent"}`} />
 
-            {/* Ambient Glow */}
-            <div className="absolute -bottom-10 -right-10 w-36 h-36 bg-orange-500/15 rounded-full blur-2xl pointer-events-none group-hover:bg-orange-500/25 transition-all duration-700" />
+            {/* Ambient Glow Corner */}
+            <div className={`absolute -bottom-12 -right-12 w-44 h-44 rounded-full blur-3xl pointer-events-none transition-all duration-700 ${isDark ? "bg-orange-500/10 group-hover:bg-orange-500/20" : "bg-orange-400/20 group-hover:bg-orange-400/30"}`} />
 
             <div className="relative z-10">
-               <h3 className="text-base font-semibold text-white drop-shadow-sm">Waktu Sholat</h3>
-               <p className="text-xs text-slate-300/80 mt-0.5">
+               <h3 className={`text-sm font-bold tracking-wide ${isDark ? "text-white" : "text-slate-900"}`}>Jadwal Sholat</h3>
+               <p className={`text-xs mt-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   {location.city}, {location.subregion.split(",")[0]}
                </p>
             </div>
@@ -317,19 +347,19 @@ export default function WeatherAndPrayer() {
                      Object.entries(prayers).map(([name, time]) => {
                         const isActive = activePrayer === name;
                         return (
-                           <div key={name} className={`flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${isActive ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold border border-white/30 shadow-[0_0_15px_rgba(249,115,22,0.4)]" : "text-slate-200 bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/15 hover:border-white/20"}`}>
+                           <div key={name} className={`flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${isActive ? "bg-gradient-to-r from-orange-500 to-amber-500 text-black font-bold shadow-md shadow-orange-500/25 border border-orange-400/30" : isDark ? "text-slate-200 bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10" : "text-slate-700 bg-black/5 border border-black/10 backdrop-blur-md hover:bg-black/10"}`}>
                               <span>{name}</span>
-                              <span className="font-mono">{time}</span>
+                              <span className="font-mono font-semibold">{time}</span>
                            </div>
                         );
                      })
                   ) : (
-                     <div className="text-xs text-slate-400 py-4">Memuat Jadwal Sholat...</div>
+                     <div className={`text-xs py-4 ${isDark ? "text-slate-500" : "text-slate-400"}`}>Memuat Jadwal Sholat...</div>
                   )}
                </div>
 
                {/* Vektor Hiasan Masjid */}
-               <div className="absolute right-2 bottom-1 opacity-20 pointer-events-none text-white flex items-end">
+               <div className={`absolute right-2 bottom-1 opacity-20 pointer-events-none flex items-end ${isDark ? "text-white" : "text-slate-800"}`}>
                   <Building2 className="w-28 h-28 stroke-[1]" />
                </div>
             </div>

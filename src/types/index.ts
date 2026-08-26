@@ -10,6 +10,9 @@ export interface Settings {
    lat: number;
    lng: number;
    cityName: string;
+   enableLiquidGlass?: boolean;
+   glassOpacity?: number;
+   glassBlur?: number;
 }
 
 export interface HourlyWeather {

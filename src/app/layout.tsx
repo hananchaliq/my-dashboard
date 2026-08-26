@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider"; // sesuaikan path file kamu
 
 const ibmPlexSans = IBM_Plex_Sans({
    variable: "--font-ibm-plex",
@@ -16,7 +17,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
    return (
       <html lang="en" suppressHydrationWarning className={`${ibmPlexSans.variable} h-full antialiased`}>
-         <body className={`${ibmPlexSans.className} h-full bg-slate-950 text-slate-100 dark`}>{children}</body>
+         <body className={`${ibmPlexSans.className} h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300`}>
+            <ThemeProvider
+               attribute="class"
+               defaultTheme="system"
+               enableSystem
+               disableTransitionOnChange
+            >
+               {children}
+            </ThemeProvider>
+         </body>
       </html>
    );
 }
