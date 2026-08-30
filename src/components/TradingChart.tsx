@@ -64,9 +64,9 @@ export default function SpotifyAndTradingWidget() {
       const initAuth = async () => {
          const urlParams = new URLSearchParams(window.location.search);
          const code = urlParams.get("code");
-         let token = localStorage.getItem("spotify_token");
+         const storedToken = localStorage.getItem("spotify_token");
 
-         if (code && !token) {
+         if (code && !storedToken) {
             const codeVerifier = localStorage.getItem("code_verifier");
             if (codeVerifier) {
                try {
@@ -84,9 +84,10 @@ export default function SpotifyAndTradingWidget() {
 
                   const data = await response.json();
                   if (data.access_token) {
-                     token = data.access_token;
-                     localStorage.setItem("spotify_token", token);
+                     localStorage.setItem("spotify_token", data.access_token);
+                     setAccessToken(data.access_token);
                      window.history.replaceState({}, document.title, window.location.pathname);
+                     return;
                   }
                } catch (err) {
                   console.error("Token exchange failed:", err);
@@ -94,7 +95,7 @@ export default function SpotifyAndTradingWidget() {
             }
          }
 
-         setAccessToken(token);
+         setAccessToken(storedToken);
       };
 
       initAuth();
