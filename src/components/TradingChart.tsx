@@ -158,7 +158,7 @@ export default function SpotifyAndTradingWidget() {
   } catch (err) {
     console.error("Spotify API Error:", err);
   }
-}, [accessToken]);F
+}, [accessToken]);
    useEffect(() => {
       if (!accessToken) return;
 
