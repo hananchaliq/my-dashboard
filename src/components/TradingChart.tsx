@@ -9,7 +9,7 @@ import { Settings } from "@/types";
 
 // ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
 const CLIENT_ID = "2632fa1328df49f58e2d24b2c269ed1d";
-const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state user-read-recently-played";
+const SCOPES = "streaming user-read-email user-read-private user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
 // Helper PKCE Code Generator
 const generateRandomString = (length: number) => {
@@ -187,12 +187,32 @@ export default function SpotifyAndTradingWidget() {
       }
    }, [accessToken]);
    useEffect(() => {
-      if (accessToken) {
-         fetchCurrentlyPlaying();
-         const interval = setInterval(fetchCurrentlyPlaying, 3000);
-         return () => clearInterval(interval);
-      }
-   }, [accessToken, fetchCurrentlyPlaying]);
+      if (!accessToken) return;
+
+      // Cast window ke any agar TypeScript mengizinkan akses ke SDK Spotify
+      const customWindow = window as any;
+
+      customWindow.onSpotifyWebPlaybackSDKReady = () => {
+         const player = new customWindow.Spotify.Player({
+            name: "Manalist Web Player",
+            getOAuthToken: (cb: (token: string) => void) => {
+               cb(accessToken);
+            },
+            volume: 0.5,
+         });
+
+         player.addListener("player_state_changed", (state: any) => {
+            if (!state) return;
+            setPlayback({
+               is_playing: !state.paused,
+               progress_ms: state.position,
+               item: state.track_window.current_track,
+            });
+         });
+
+         player.connect();
+      };
+   }, [accessToken]);
 
    // Remote Control Track
    const controlPlayback = async (action: "play" | "pause" | "next" | "previous") => {
