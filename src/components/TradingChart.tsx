@@ -136,56 +136,29 @@ export default function SpotifyAndTradingWidget() {
 
    // 2. Fetch Currently Playing Status secara Realtime
    const fetchCurrentlyPlaying = useCallback(async () => {
-      if (!accessToken) return;
+  if (!accessToken) return;
 
-      try {
-         // 1. Coba panggil Player State utama
-         let res = await fetch("https://api.spotify.com/v1/me/player", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-         });
+  try {
+    const res = await fetch("https://api.spotify.com/v1/me/player", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
-         if (res.status === 401) {
-            handleLogout();
-            return;
-         }
+    console.log("Spotify API Status Code:", res.status);
 
-         // 2. Jika 204 (No Active Session), paksa panggil /currently-playing langsung
-         if (res.status === 204) {
-            res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
-               headers: { Authorization: `Bearer ${accessToken}` },
-            });
-         }
-
-         if (res.status === 200) {
-            const data = await res.json();
-            if (data && data.item) {
-               setPlayback(data);
-               return;
-            }
-         }
-
-         // 3. Fallback: Ambil trek terakhir yang diputar jika player API masih tertahan
-         const recentRes = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=1", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-         });
-
-         if (recentRes.status === 200) {
-            const recentData = await recentRes.json();
-            if (recentData.items && recentData.items.length > 0) {
-               setPlayback({
-                  is_playing: true,
-                  progress_ms: 0,
-                  item: recentData.items[0].track,
-               });
-               return;
-            }
-         }
-
-         setPlayback(null);
-      } catch (err) {
-         console.error("Spotify API Error:", err);
-      }
-   }, [accessToken]);
+    if (res.status === 200) {
+      const data = await res.json();
+      console.log("Spotify Active Data:", data);
+      setPlayback(data);
+    } else if (res.status === 204) {
+      console.warn("Spotify 204: No Active Device selected");
+      setPlayback(null);
+    } else if (res.status === 401) {
+      handleLogout();
+    }
+  } catch (err) {
+    console.error("Spotify API Error:", err);
+  }
+}, [accessToken]);F
    useEffect(() => {
       if (!accessToken) return;
 
