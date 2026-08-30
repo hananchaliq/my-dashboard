@@ -18,7 +18,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
    return (
       
       <html lang="en" suppressHydrationWarning className={`${ibmPlexSans.variable} h-full antialiased`}>
-         <script src="https://sdk.scdn.co/spotify-player.js"></script>
          <body className={`${ibmPlexSans.className} h-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300`}>
             <ThemeProvider
                attribute="class"

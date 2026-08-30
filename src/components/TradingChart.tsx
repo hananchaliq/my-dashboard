@@ -136,29 +136,33 @@ export default function SpotifyAndTradingWidget() {
 
    // 2. Fetch Currently Playing Status secara Realtime
    const fetchCurrentlyPlaying = useCallback(async () => {
-  if (!accessToken) return;
+      if (!accessToken) return;
 
-  try {
-    const res = await fetch("https://api.spotify.com/v1/me/player", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+      try {
+         // Gunakan endpoint currently-playing bawaan yang mendukung akun Free & Premium
+         const res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+         });
 
-    console.log("Spotify API Status Code:", res.status);
+         if (res.status === 401) {
+            handleLogout();
+            return;
+         }
 
-    if (res.status === 200) {
-      const data = await res.json();
-      console.log("Spotify Active Data:", data);
-      setPlayback(data);
-    } else if (res.status === 204) {
-      console.warn("Spotify 204: No Active Device selected");
-      setPlayback(null);
-    } else if (res.status === 401) {
-      handleLogout();
-    }
-  } catch (err) {
-    console.error("Spotify API Error:", err);
-  }
-}, [accessToken]);
+         if (res.status === 200) {
+            const data = await res.json();
+            if (data && data.item) {
+               setPlayback(data);
+            } else {
+               setPlayback(null);
+            }
+         } else {
+            setPlayback(null);
+         }
+      } catch (err) {
+         console.error("Fetch Error:", err);
+      }
+   }, [accessToken]);
    useEffect(() => {
       if (!accessToken) return;
 
