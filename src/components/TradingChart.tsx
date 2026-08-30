@@ -134,25 +134,34 @@ export default function SpotifyAndTradingWidget() {
       setPlayback(null);
    };
 
-   // 2. Fetch Currently Playing Status secara Realtime
+   // 2. Fetch Currently Playing Status secara Realtime dengan Fallback
    const fetchCurrentlyPlaying = useCallback(async () => {
       if (!accessToken) return;
+
       try {
-         const res = await fetch("https://api.spotify.com/v1/me/player", {
+         // Attempt 1: Fetch Full Player State
+         let res = await fetch("https://api.spotify.com/v1/me/player", {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
 
-         if (res.status === 204) {
-            setPlayback(null);
-            return;
-         }
          if (res.status === 401) {
             handleLogout();
             return;
          }
 
-         const data = await res.json();
-         setPlayback(data);
+         // Attempt 2: Fallback ke Currently Playing jika Player State mengembalikan 204
+         if (res.status === 204) {
+            res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+               headers: { Authorization: `Bearer ${accessToken}` },
+            });
+         }
+
+         if (res.status === 200) {
+            const data = await res.json();
+            setPlayback(data);
+         } else {
+            setPlayback(null);
+         }
       } catch (err) {
          console.error("Spotify API error:", err);
       }
