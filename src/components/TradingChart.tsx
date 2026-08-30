@@ -8,7 +8,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Settings } from "@/types";
 
 // ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
-const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35";
+const CLIENT_ID = "2632fa1328df49f58e2d24b2c269ed1d";
 const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
 // Helper PKCE Code Generator
