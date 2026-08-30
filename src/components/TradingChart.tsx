@@ -9,7 +9,7 @@ import { Settings } from "@/types";
 
 // ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
 const CLIENT_ID = "2632fa1328df49f58e2d24b2c269ed1d";
-const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state user-read-recently-played user-read-private";
+const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state user-read-recently-played";
 
 // Helper PKCE Code Generator
 const generateRandomString = (length: number) => {
@@ -139,7 +139,7 @@ export default function SpotifyAndTradingWidget() {
       if (!accessToken) return;
 
       try {
-         // 1. Coba ambil status Player penuh
+         // 1. Coba panggil Player State utama
          let res = await fetch("https://api.spotify.com/v1/me/player", {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
@@ -149,7 +149,7 @@ export default function SpotifyAndTradingWidget() {
             return;
          }
 
-         // 2. Jika 204 (No Active Device), coba fallback ke currently-playing
+         // 2. Jika 204 (No Active Session), paksa panggil /currently-playing langsung
          if (res.status === 204) {
             res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
                headers: { Authorization: `Bearer ${accessToken}` },
@@ -164,7 +164,7 @@ export default function SpotifyAndTradingWidget() {
             }
          }
 
-         // 3. Jika masih kosong, coba fallback ke Recently Played (Opsional)
+         // 3. Fallback: Ambil trek terakhir yang diputar jika player API masih tertahan
          const recentRes = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=1", {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
@@ -172,11 +172,10 @@ export default function SpotifyAndTradingWidget() {
          if (recentRes.status === 200) {
             const recentData = await recentRes.json();
             if (recentData.items && recentData.items.length > 0) {
-               const lastTrack = recentData.items[0];
                setPlayback({
-                  is_playing: false,
+                  is_playing: true,
                   progress_ms: 0,
-                  item: lastTrack.track,
+                  item: recentData.items[0].track,
                });
                return;
             }
@@ -184,7 +183,7 @@ export default function SpotifyAndTradingWidget() {
 
          setPlayback(null);
       } catch (err) {
-         console.error("Spotify API error:", err);
+         console.error("Spotify API Error:", err);
       }
    }, [accessToken]);
    useEffect(() => {
