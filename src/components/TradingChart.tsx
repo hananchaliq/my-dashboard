@@ -8,9 +8,29 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Settings } from "@/types";
 
 // ⚙️ KONFIGURASI SPOTIFY API
-const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35"; // Paste Client ID dari Spotify Developer Dashboard
-const REDIRECT_URI = typeof window !== "undefined" ? window.location.origin : "https://localhost:3000";
-const SCOPES = ["user-read-currently-playing", "user-read-playback-state", "user-modify-playback-state"].join("%20");
+const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35"; // Ganti dengan Client ID kamu
+const REDIRECT_URI = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+
+// Helper PKCE Generator
+const generateRandomString = (length: number) => {
+   const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+   const values = crypto.getRandomValues(new Uint8Array(length));
+   return values.reduce((acc, x) => acc + possible[x % possible.length], "");
+};
+
+const sha256 = async (plain: string) => {
+   const encoder = new TextEncoder();
+   const data = encoder.encode(plain);
+   return window.crypto.subtle.digest("SHA-256", data);
+};
+
+const base64encode = (input: ArrayBuffer) => {
+   return btoa(String.fromCharCode(...new Uint8Array(input)))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+};
 
 interface DataPoint {
    time: string;
@@ -37,37 +57,72 @@ export default function SpotifyAndTradingWidget() {
    const [accessToken, setAccessToken] = useState<string | null>(null);
    const [playback, setPlayback] = useState<any>(null);
 
-   // 1. Parsing Token dari URL Hash (#access_token=...)
+   // 1. Tangkap Authorization Code & Tukar dengan Access Token (PKCE)
    useEffect(() => {
       setIsMounted(true);
 
-      const hash = window.location.hash;
-      let token = localStorage.getItem("spotify_token");
+      const initAuth = async () => {
+         const urlParams = new URLSearchParams(window.location.search);
+         const code = urlParams.get("code");
+         let token = localStorage.getItem("spotify_token");
 
-      if (!token && hash) {
-         const params = new URLSearchParams(hash.replace("#", "?"));
-         const tokenParam = params.get("access_token");
+         if (code && !token) {
+            const codeVerifier = localStorage.getItem("code_verifier");
+            if (codeVerifier) {
+               try {
+                  const response = await fetch("https://accounts.spotify.com/api/token", {
+                     method: "POST",
+                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                     body: new URLSearchParams({
+                        client_id: CLIENT_ID,
+                        grant_type: "authorization_code",
+                        code: code,
+                        redirect_uri: REDIRECT_URI,
+                        code_verifier: codeVerifier,
+                     }),
+                  });
 
-         if (tokenParam) {
-            token = tokenParam;
-            localStorage.setItem("spotify_token", token);
-            // Bersihkan hash dari URL browser
-            window.history.pushState("", document.title, window.location.pathname + window.location.search);
+                  const data = await response.json();
+                  if (data.access_token) {
+                     token = data.access_token;
+                     localStorage.setItem("spotify_token", token);
+                     window.history.replaceState({}, document.title, window.location.pathname);
+                  }
+               } catch (err) {
+                  console.error("Token exchange failed:", err);
+               }
+            }
          }
-      }
 
-      setAccessToken(token);
+         setAccessToken(token);
+      };
+
+      initAuth();
    }, []);
 
-   // Handler Login Redirect ke Spotify
-   const handleSpotifyLogin = () => {
-      const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${SCOPES}&show_dialog=true`;
+   // Handler Login Redirect Menggunakan response_type=code + PKCE
+   const handleSpotifyLogin = async () => {
+      const codeVerifier = generateRandomString(64);
+      const hashed = await sha256(codeVerifier);
+      const codeChallenge = base64encode(hashed);
 
-      window.location.href = authUrl;
+      localStorage.setItem("code_verifier", codeVerifier);
+
+      const params = new URLSearchParams({
+         response_type: "code",
+         client_id: CLIENT_ID,
+         scope: SCOPES,
+         code_challenge_method: "S256",
+         code_challenge: codeChallenge,
+         redirect_uri: REDIRECT_URI,
+      });
+
+      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
    };
 
    const handleLogout = () => {
       localStorage.removeItem("spotify_token");
+      localStorage.removeItem("code_verifier");
       setAccessToken(null);
       setPlayback(null);
    };
@@ -250,12 +305,10 @@ export default function SpotifyAndTradingWidget() {
 
    return (
       <div className="w-full max-w-sm h-full flex flex-col gap-3 select-none">
-         {/* ================= CONTAINER 1 (ATAS): SPOTIFY REALTIME PLAYER (50% TINGGI) ================= */}
+         {/* ================= CONTAINER 1 (ATAS): SPOTIFY REALTIME PLAYER ================= */}
          <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
-            {/* Dynamic Album Aura Background */}
             {track?.album?.images[0]?.url && <div className="absolute inset-0 bg-cover bg-center opacity-25 blur-2xl pointer-events-none scale-125 transition-all duration-700" style={{ backgroundImage: `url(${track.album.images[0].url})` }} />}
 
-            {/* Header Spotify */}
             <div className="flex items-center justify-between shrink-0 relative z-10">
                <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-black/20 border border-white/10 backdrop-blur-md">
                   <Music className="w-3.5 h-3.5 text-emerald-400" />
@@ -269,7 +322,6 @@ export default function SpotifyAndTradingWidget() {
                )}
             </div>
 
-            {/* State 1: Belum Login */}
             {!accessToken ? (
                <div className="flex-1 flex flex-col items-center justify-center space-y-3 relative z-10">
                   <p className="text-xs text-center opacity-70">Hubungkan widget ke akun Spotify kamu</p>
@@ -278,13 +330,11 @@ export default function SpotifyAndTradingWidget() {
                   </button>
                </div>
             ) : !track ? (
-               /* State 2: Belum Ada Lagu Diputar */
                <div className="flex-1 flex flex-col items-center justify-center space-y-1 relative z-10 text-center">
                   <p className="text-xs font-semibold">Tidak ada lagu diputar</p>
                   <p className="text-[10px] opacity-60">Buka aplikasi Spotify di HP/PC & putar lagu</p>
                </div>
             ) : (
-               /* State 3: Live Playing Track */
                <>
                   <div className="flex items-center space-x-3 relative z-10 my-1">
                      <img src={track.album.images[0]?.url} alt={track.name} className="w-14 h-14 rounded-2xl object-cover shadow-xl border border-white/10 shrink-0" />
@@ -295,7 +345,6 @@ export default function SpotifyAndTradingWidget() {
                      </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="space-y-1 relative z-10">
                      <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
                         <div className="bg-emerald-400 h-full rounded-full transition-all duration-300" style={{ width: `${(progressMs / durationMs) * 100}%` }} />
@@ -306,7 +355,6 @@ export default function SpotifyAndTradingWidget() {
                      </div>
                   </div>
 
-                  {/* Remote Controls */}
                   <div className="flex items-center justify-center space-x-4 relative z-10 shrink-0">
                      <button onClick={() => controlPlayback("previous")} className="hover:scale-110 active:scale-95 transition-all opacity-80">
                         <SkipBack className="w-4 h-4 fill-current" />
@@ -322,11 +370,10 @@ export default function SpotifyAndTradingWidget() {
             )}
          </div>
 
-         {/* ================= CONTAINER 2 (BAWAH): TRADING CHART (50% TINGGI) ================= */}
+         {/* ================= CONTAINER 2 (BAWAH): TRADING CHART ================= */}
          <div style={liquidGlassStyle} className={`relative group overflow-hidden p-3.5 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between space-y-2 ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
             {isLiquidEnabled && <div className={`absolute inset-x-0 top-0 h-1/2 pointer-events-none rounded-t-3xl ${isDark ? "bg-gradient-to-b from-white/10 to-transparent" : "bg-gradient-to-b from-white/60 to-transparent"}`} />}
 
-            {/* Header Trading */}
             <div className="flex items-center justify-between shrink-0 relative z-10">
                <div className="flex items-center space-x-2">
                   <div className={`flex items-center space-x-1.5 px-2 py-0.5 rounded-xl border backdrop-blur-md ${isDark ? "bg-white/10 border-white/15 text-white" : "bg-slate-100/90 border-slate-200 text-slate-900"}`}>
@@ -344,13 +391,11 @@ export default function SpotifyAndTradingWidget() {
                </div>
             </div>
 
-            {/* Harga Realtime */}
             <div className="shrink-0 flex items-baseline space-x-1 relative z-10">
                {isLoading ? <span className="text-lg font-bold text-slate-400 animate-pulse">Memuat...</span> : <span className={`text-lg font-bold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(currentPrice)}</span>}
                <span className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>IDR</span>
             </div>
 
-            {/* Grafik Area Chart */}
             <div className={`flex-1 min-h-[80px] w-full rounded-xl p-1 border backdrop-blur-md relative z-10 ${isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100/60 border-slate-200"}`}>
                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data} margin={{ top: 2, right: 2, left: -25, bottom: 0 }}>
@@ -378,7 +423,6 @@ export default function SpotifyAndTradingWidget() {
                </ResponsiveContainer>
             </div>
 
-            {/* Mini Stats Panel */}
             <div className={`shrink-0 border rounded-xl p-1.5 grid grid-cols-4 gap-1 text-[8px] backdrop-blur-md relative z-10 text-center ${isDark ? "bg-white/[0.04] border-white/10" : "bg-slate-100/80 border-slate-200"}`}>
                <div>
                   <p className={isDark ? "text-slate-400" : "text-slate-500"}>Open</p>
