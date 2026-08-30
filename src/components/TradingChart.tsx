@@ -9,7 +9,7 @@ import { Settings } from "@/types";
 
 // ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
 const CLIENT_ID = "2632fa1328df49f58e2d24b2c269ed1d";
-const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state user-read-recently-played user-read-private";
 
 // Helper PKCE Code Generator
 const generateRandomString = (length: number) => {
@@ -134,12 +134,12 @@ export default function SpotifyAndTradingWidget() {
       setPlayback(null);
    };
 
-   // 2. Fetch Currently Playing Status secara Realtime dengan Fallback
+   // 2. Fetch Currently Playing Status secara Realtime
    const fetchCurrentlyPlaying = useCallback(async () => {
       if (!accessToken) return;
 
       try {
-         // Attempt 1: Fetch Full Player State
+         // 1. Coba ambil status Player penuh
          let res = await fetch("https://api.spotify.com/v1/me/player", {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
@@ -149,7 +149,7 @@ export default function SpotifyAndTradingWidget() {
             return;
          }
 
-         // Attempt 2: Fallback ke Currently Playing jika Player State mengembalikan 204
+         // 2. Jika 204 (No Active Device), coba fallback ke currently-playing
          if (res.status === 204) {
             res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
                headers: { Authorization: `Bearer ${accessToken}` },
@@ -158,15 +158,35 @@ export default function SpotifyAndTradingWidget() {
 
          if (res.status === 200) {
             const data = await res.json();
-            setPlayback(data);
-         } else {
-            setPlayback(null);
+            if (data && data.item) {
+               setPlayback(data);
+               return;
+            }
          }
+
+         // 3. Jika masih kosong, coba fallback ke Recently Played (Opsional)
+         const recentRes = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=1", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+         });
+
+         if (recentRes.status === 200) {
+            const recentData = await recentRes.json();
+            if (recentData.items && recentData.items.length > 0) {
+               const lastTrack = recentData.items[0];
+               setPlayback({
+                  is_playing: false,
+                  progress_ms: 0,
+                  item: lastTrack.track,
+               });
+               return;
+            }
+         }
+
+         setPlayback(null);
       } catch (err) {
          console.error("Spotify API error:", err);
       }
    }, [accessToken]);
-
    useEffect(() => {
       if (accessToken) {
          fetchCurrentlyPlaying();
