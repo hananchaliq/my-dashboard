@@ -2,10 +2,15 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
-import { ArrowUpRight, ArrowDownRight, RefreshCw, TrendingUp } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, RefreshCw, TrendingUp, Play, Pause, SkipBack, SkipForward, Music, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Settings } from "@/types";
+
+// ⚙️ KONFIGURASI SPOTIFY API
+const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35"; // Paste Client ID dari Spotify Developer Dashboard
+const REDIRECT_URI = typeof window !== "undefined" ? window.location.origin : "https://localhost:3000";
+const SCOPES = ["user-read-currently-playing", "user-read-playback-state", "user-modify-playback-state"].join("%20");
 
 interface DataPoint {
    time: string;
@@ -23,33 +28,115 @@ const DEFAULT_SETTINGS: Settings = {
    glassBlur: 12,
 };
 
-export default function TradingChart() {
+export default function SpotifyAndTradingWidget() {
    const [settings] = useLocalStorage<Settings>("app_settings", DEFAULT_SETTINGS);
    const { resolvedTheme, theme } = useTheme();
+   const [isMounted, setIsMounted] = useState<boolean>(false);
 
+   // --- SPOTIFY REAL API STATES ---
+   const [accessToken, setAccessToken] = useState<string | null>(null);
+   const [playback, setPlayback] = useState<any>(null);
+
+   // 1. Parsing Token dari URL Hash (#access_token=...)
+   useEffect(() => {
+      setIsMounted(true);
+
+      const hash = window.location.hash;
+      let token = localStorage.getItem("spotify_token");
+
+      if (!token && hash) {
+         const params = new URLSearchParams(hash.replace("#", "?"));
+         const tokenParam = params.get("access_token");
+
+         if (tokenParam) {
+            token = tokenParam;
+            localStorage.setItem("spotify_token", token);
+            // Bersihkan hash dari URL browser
+            window.history.pushState("", document.title, window.location.pathname + window.location.search);
+         }
+      }
+
+      setAccessToken(token);
+   }, []);
+
+   // Handler Login Redirect ke Spotify
+   const handleSpotifyLogin = () => {
+      const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${SCOPES}&show_dialog=true`;
+
+      window.location.href = authUrl;
+   };
+
+   const handleLogout = () => {
+      localStorage.removeItem("spotify_token");
+      setAccessToken(null);
+      setPlayback(null);
+   };
+
+   // 2. Fetch Status Currently Playing dari Spotify API
+   const fetchCurrentlyPlaying = useCallback(async () => {
+      if (!accessToken) return;
+      try {
+         const res = await fetch("https://api.spotify.com/v1/me/player", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+         });
+
+         if (res.status === 204) {
+            setPlayback(null);
+            return;
+         }
+         if (res.status === 401) {
+            handleLogout();
+            return;
+         }
+
+         const data = await res.json();
+         setPlayback(data);
+      } catch (err) {
+         console.error("Spotify API error:", err);
+      }
+   }, [accessToken]);
+
+   useEffect(() => {
+      if (accessToken) {
+         fetchCurrentlyPlaying();
+         const interval = setInterval(fetchCurrentlyPlaying, 3000);
+         return () => clearInterval(interval);
+      }
+   }, [accessToken, fetchCurrentlyPlaying]);
+
+   // Remote Control Track via Spotify API
+   const controlPlayback = async (action: "play" | "pause" | "next" | "previous") => {
+      if (!accessToken) return;
+      const endpoints: Record<string, { url: string; method: string }> = {
+         play: { url: "https://api.spotify.com/v1/me/player/play", method: "PUT" },
+         pause: { url: "https://api.spotify.com/v1/me/player/pause", method: "PUT" },
+         next: { url: "https://api.spotify.com/v1/me/player/next", method: "POST" },
+         previous: { url: "https://api.spotify.com/v1/me/player/previous", method: "POST" },
+      };
+
+      const target = endpoints[action];
+      try {
+         await fetch(target.url, {
+            method: target.method,
+            headers: { Authorization: `Bearer ${accessToken}` },
+         });
+         setTimeout(fetchCurrentlyPlaying, 500);
+      } catch (err) {
+         console.error("Control playback failed:", err);
+      }
+   };
+
+   // --- STATE TRADING CHART ---
    const [data, setData] = useState<DataPoint[]>([]);
    const [currentPrice, setCurrentPrice] = useState<number>(0);
    const [percentageChange, setPercentageChange] = useState<number>(0);
-   const [stats, setStats] = useState({
-      open: 0,
-      high: 0,
-      low: 0,
-      prevClose: 0,
-   });
+   const [stats, setStats] = useState({ open: 0, high: 0, low: 0, prevClose: 0 });
    const [lastUpdate, setLastUpdate] = useState<string>("");
    const [isLoading, setIsLoading] = useState<boolean>(true);
-   const [isMounted, setIsMounted] = useState<boolean>(false);
-
-   // Ref untuk menampung harga terakhir agar interval 1 detik selalu dapat nilai paling segar
    const priceRef = useRef<number>(0);
-
-   useEffect(() => {
-      setIsMounted(true);
-   }, []);
 
    const activeSettings = isMounted ? settings : DEFAULT_SETTINGS;
 
-   // 1. Fetch data asli dari API (sebagai anchor/base price)
    const fetchRealData = useCallback(async () => {
       try {
          const res = await fetch("https://open.er-api.com/v6/latest/USD");
@@ -58,17 +145,10 @@ export default function TradingChart() {
          const result = await res.json();
          const realPrice = Number(result.rates.IDR);
 
-         // Set base price jika baru pertama kali fetch
          if (priceRef.current === 0) {
             priceRef.current = realPrice;
             setCurrentPrice(realPrice);
-
-            setStats({
-               open: realPrice,
-               high: realPrice,
-               low: realPrice,
-               prevClose: realPrice,
-            });
+            setStats({ open: realPrice, high: realPrice, low: realPrice, prevClose: realPrice });
          }
       } catch (err) {
          console.error("Fetch error:", err);
@@ -77,16 +157,10 @@ export default function TradingChart() {
       }
    }, []);
 
-   // 2. Ticking Loop (Berjalan TIAP 1 DETIK untuk simulasi grafik live trading)
    useEffect(() => {
       fetchRealData();
+      const apiInterval = setInterval(() => fetchRealData(), 30000);
 
-      // Fetch API asli tiap 30 detik untuk sync ulang
-      const apiInterval = setInterval(() => {
-         fetchRealData();
-      }, 30000);
-
-      // Live Tick per 1 Detik (membuat grafik naik-turun dinamis)
       const tickInterval = setInterval(() => {
          if (priceRef.current === 0) return;
 
@@ -98,7 +172,6 @@ export default function TradingChart() {
             hour12: false,
          });
 
-         // Fluktuasi random acak antara -4.5 IDR sampai +4.5 IDR
          const delta = (Math.random() - 0.49) * 9;
          const newPrice = Number((priceRef.current + delta).toFixed(2));
 
@@ -106,7 +179,6 @@ export default function TradingChart() {
          setCurrentPrice(newPrice);
          setLastUpdate(timeString);
 
-         // Update statistik High, Low, & Change
          setStats(prev => {
             const openVal = prev.open === 0 ? newPrice : prev.open;
             const highVal = Math.max(prev.high === 0 ? newPrice : prev.high, newPrice);
@@ -119,10 +191,9 @@ export default function TradingChart() {
             return { open: openVal, high: highVal, low: lowVal, prevClose: prevCloseVal };
          });
 
-         // Simpan maksimal 40 data point biar grafiknya terus bergeser/running
          setData(prevData => {
             const updated = [...prevData, { time: timeString, price: newPrice }];
-            if (updated.length > 40) return updated.slice(1);
+            if (updated.length > 30) return updated.slice(1);
             return updated;
          });
       }, 1000);
@@ -135,8 +206,9 @@ export default function TradingChart() {
 
    if (!isMounted) {
       return (
-         <div className="w-full h-full min-h-[320px] rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-900/50 animate-pulse flex items-center justify-center">
-            <span className="text-xs text-slate-500 font-mono">Loading Realtime Engine...</span>
+         <div className="w-full max-w-sm h-full min-h-[550px] flex flex-col gap-3">
+            <div className="flex-1 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-900/50 animate-pulse" />
+            <div className="flex-1 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-900/50 animate-pulse" />
          </div>
       );
    }
@@ -150,7 +222,6 @@ export default function TradingChart() {
    };
 
    const isPositive = percentageChange >= 0;
-
    const isLiquidEnabled = activeSettings.enableLiquidGlass ?? true;
    const glassOpacity = (activeSettings.glassOpacity ?? 40) / 100;
    const glassBlur = activeSettings.glassBlur ?? 12;
@@ -165,99 +236,165 @@ export default function TradingChart() {
            backgroundColor: isDark ? "#0d1117" : "#ffffff",
         };
 
+   const isPlaying = playback?.is_playing ?? false;
+   const track = playback?.item;
+   const progressMs = playback?.progress_ms ?? 0;
+   const durationMs = track?.duration_ms ?? 1;
+
+   const formatMs = (ms: number) => {
+      const totalSec = Math.floor(ms / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}:${s < 10 ? "0" : ""}${s}`;
+   };
+
    return (
-      <div style={liquidGlassStyle} className={`relative group overflow-hidden p-6 rounded-3xl border transition-all duration-300 h-full flex flex-col justify-between w-full select-none space-y-4 ${isDark ? "border-white/15 text-white shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] hover:border-white/30" : "border-slate-200/80 text-slate-900 shadow-[0_8px_32px_0_rgba(0,0,0,0.06)] hover:border-emerald-400/40"}`}>
-         {/* Glossy Reflective Gradient */}
-         {isLiquidEnabled && <div className={`absolute inset-x-0 top-0 h-1/2 pointer-events-none rounded-t-3xl ${isDark ? "bg-gradient-to-b from-white/10 to-transparent" : "bg-gradient-to-b from-white/60 to-transparent"}`} />}
+      <div className="w-full max-w-sm h-full flex flex-col gap-3 select-none">
+         {/* ================= CONTAINER 1 (ATAS): SPOTIFY REALTIME PLAYER (50% TINGGI) ================= */}
+         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
+            {/* Dynamic Album Aura Background */}
+            {track?.album?.images[0]?.url && <div className="absolute inset-0 bg-cover bg-center opacity-25 blur-2xl pointer-events-none scale-125 transition-all duration-700" style={{ backgroundImage: `url(${track.album.images[0].url})` }} />}
 
-         {/* Ambient Inner Glow */}
-         <div className={`absolute -top-12 -right-12 w-48 h-48 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${isDark ? (isPositive ? "bg-emerald-500/10 group-hover:bg-emerald-500/25" : "bg-rose-500/10 group-hover:bg-rose-500/25") : isPositive ? "bg-emerald-400/20 group-hover:bg-emerald-400/30" : "bg-rose-400/20 group-hover:bg-rose-400/30"}`} />
-
-         {/* Header Utama */}
-         <div className="flex items-center justify-between shrink-0 relative z-10">
-            <div className="flex items-center space-x-2.5">
-               <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-2xl border backdrop-blur-md shadow-inner ${isDark ? "bg-white/10 border-white/15 text-white" : "bg-slate-100/90 border-slate-200 text-slate-900"}`}>
-                  <TrendingUp className={`w-3.5 h-3.5 animate-pulse ${isPositive ? "text-emerald-400" : "text-rose-400"}`} />
-                  <h2 className="text-xs font-bold tracking-wide drop-shadow-sm">Kurs IDR / USD</h2>
+            {/* Header Spotify */}
+            <div className="flex items-center justify-between shrink-0 relative z-10">
+               <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-black/20 border border-white/10 backdrop-blur-md">
+                  <Music className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-[10px] font-bold tracking-wider text-emerald-400">SPOTIFY CONNECTED</span>
                </div>
 
-               <div className={`flex items-center space-x-0.5 text-xs font-semibold px-2.5 py-1 rounded-full border backdrop-blur-md transition-all duration-300 ${isPositive ? (isDark ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]" : "text-emerald-700 bg-emerald-100 border-emerald-300") : isDark ? "text-rose-300 bg-rose-500/10 border-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.2)]" : "text-rose-700 bg-rose-100 border-rose-300"}`}>
-                  {isPositive ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  <span>{isPositive ? `+${percentageChange}%` : `${percentageChange}%`}</span>
+               {accessToken && (
+                  <button onClick={handleLogout} title="Logout" className="p-1 hover:text-rose-400 transition-colors">
+                     <LogOut className="w-3.5 h-3.5 opacity-60" />
+                  </button>
+               )}
+            </div>
+
+            {/* State 1: Belum Login */}
+            {!accessToken ? (
+               <div className="flex-1 flex flex-col items-center justify-center space-y-3 relative z-10">
+                  <p className="text-xs text-center opacity-70">Hubungkan widget ke akun Spotify kamu</p>
+                  <button onClick={handleSpotifyLogin} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-full transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+                     Connect Spotify
+                  </button>
+               </div>
+            ) : !track ? (
+               /* State 2: Belum Ada Lagu Diputar */
+               <div className="flex-1 flex flex-col items-center justify-center space-y-1 relative z-10 text-center">
+                  <p className="text-xs font-semibold">Tidak ada lagu diputar</p>
+                  <p className="text-[10px] opacity-60">Buka aplikasi Spotify di HP/PC & putar lagu</p>
+               </div>
+            ) : (
+               /* State 3: Live Playing Track */
+               <>
+                  <div className="flex items-center space-x-3 relative z-10 my-1">
+                     <img src={track.album.images[0]?.url} alt={track.name} className="w-14 h-14 rounded-2xl object-cover shadow-xl border border-white/10 shrink-0" />
+                     <div className="flex-1 min-w-0">
+                        <h3 className="text-xs font-bold truncate tracking-wide">{track.name}</h3>
+                        <p className={`text-[10px] truncate mt-0.5 ${isDark ? "text-slate-300/80" : "text-slate-600"}`}>{track.artists.map((a: any) => a.name).join(", ")}</p>
+                        <p className="text-[9px] truncate opacity-50 font-mono mt-0.5">{track.album.name}</p>
+                     </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1 relative z-10">
+                     <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+                        <div className="bg-emerald-400 h-full rounded-full transition-all duration-300" style={{ width: `${(progressMs / durationMs) * 100}%` }} />
+                     </div>
+                     <div className="flex justify-between text-[9px] font-mono opacity-60">
+                        <span>{formatMs(progressMs)}</span>
+                        <span>{formatMs(durationMs)}</span>
+                     </div>
+                  </div>
+
+                  {/* Remote Controls */}
+                  <div className="flex items-center justify-center space-x-4 relative z-10 shrink-0">
+                     <button onClick={() => controlPlayback("previous")} className="hover:scale-110 active:scale-95 transition-all opacity-80">
+                        <SkipBack className="w-4 h-4 fill-current" />
+                     </button>
+                     <button onClick={() => controlPlayback(isPlaying ? "pause" : "play")} className="p-2.5 rounded-full bg-emerald-500 text-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-500/30">
+                        {isPlaying ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
+                     </button>
+                     <button onClick={() => controlPlayback("next")} className="hover:scale-110 active:scale-95 transition-all opacity-80">
+                        <SkipForward className="w-4 h-4 fill-current" />
+                     </button>
+                  </div>
+               </>
+            )}
+         </div>
+
+         {/* ================= CONTAINER 2 (BAWAH): TRADING CHART (50% TINGGI) ================= */}
+         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-3.5 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between space-y-2 ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
+            {isLiquidEnabled && <div className={`absolute inset-x-0 top-0 h-1/2 pointer-events-none rounded-t-3xl ${isDark ? "bg-gradient-to-b from-white/10 to-transparent" : "bg-gradient-to-b from-white/60 to-transparent"}`} />}
+
+            {/* Header Trading */}
+            <div className="flex items-center justify-between shrink-0 relative z-10">
+               <div className="flex items-center space-x-2">
+                  <div className={`flex items-center space-x-1.5 px-2 py-0.5 rounded-xl border backdrop-blur-md ${isDark ? "bg-white/10 border-white/15 text-white" : "bg-slate-100/90 border-slate-200 text-slate-900"}`}>
+                     <TrendingUp className={`w-3.5 h-3.5 ${isPositive ? "text-emerald-400" : "text-rose-400"}`} />
+                     <h2 className="text-xs font-bold tracking-wide">USD/IDR</h2>
+                  </div>
+                  <div className={`flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border backdrop-blur-md ${isPositive ? (isDark ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/30" : "text-emerald-700 bg-emerald-100 border-emerald-300") : isDark ? "text-rose-300 bg-rose-500/10 border-rose-500/30" : "text-rose-700 bg-rose-100 border-rose-300"}`}>
+                     {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                     <span>{isPositive ? `+${percentageChange}%` : `${percentageChange}%`}</span>
+                  </div>
+               </div>
+               <div className="flex items-center space-x-1 text-[10px]">
+                  <RefreshCw className="w-3 h-3 text-emerald-400 animate-spin" />
+                  <span className={isDark ? "text-slate-300" : "text-slate-600"}>{lastUpdate || "--:--"}</span>
                </div>
             </div>
 
-            <div className={`flex items-center space-x-1.5 border px-3 py-1 rounded-full text-xs font-medium tracking-wider backdrop-blur-md ${isDark ? "border-white/20 bg-white/10 text-slate-200 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]" : "border-slate-200 bg-slate-100/90 text-slate-700 shadow-sm"}`}>
-               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-               <span>TICK 1S</span>
+            {/* Harga Realtime */}
+            <div className="shrink-0 flex items-baseline space-x-1 relative z-10">
+               {isLoading ? <span className="text-lg font-bold text-slate-400 animate-pulse">Memuat...</span> : <span className={`text-lg font-bold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(currentPrice)}</span>}
+               <span className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>IDR</span>
             </div>
-         </div>
 
-         {/* Tampilan Harga Utama */}
-         <div className="shrink-0 relative z-10">
-            <div className="flex items-baseline space-x-2">
-               {isLoading ? <span className="text-3xl font-bold tracking-tight text-slate-400 animate-pulse">Memuat...</span> : <span className={`text-3xl font-bold tracking-tight drop-shadow-md transition-colors duration-300 ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(currentPrice)}</span>}
-               <span className={`text-sm font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>IDR</span>
-            </div>
-            <p className={`text-xs font-medium mt-0.5 ${isDark ? "text-slate-300/80" : "text-slate-500"}`}>1 USD (Live 1s Fluctuations)</p>
-         </div>
-
-         {/* Grid Grafik & Panel Statistik */}
-         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end flex-1 min-h-0 relative z-10">
-            {/* Area Grafik */}
-            <div className={`lg:col-span-3 h-full min-h-[180px] w-full rounded-2xl p-2 border backdrop-blur-md ${isDark ? "bg-white/[0.03] border-white/15 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]" : "bg-slate-100/60 border-slate-200 shadow-inner"}`}>
+            {/* Grafik Area Chart */}
+            <div className={`flex-1 min-h-[80px] w-full rounded-xl p-1 border backdrop-blur-md relative z-10 ${isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100/60 border-slate-200"}`}>
                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={data} margin={{ top: 2, right: 2, left: -25, bottom: 0 }}>
                      <defs>
-                        <linearGradient id="colorDynamic" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="colorDynamicParent" x1="0" y1="0" x2="0" y2="1">
                            <stop offset="5%" stopColor={isPositive ? "#10b981" : "#f43f5e"} stopOpacity={0.4} />
                            <stop offset="95%" stopColor={isPositive ? "#10b981" : "#f43f5e"} stopOpacity={0.0} />
                         </linearGradient>
                      </defs>
-                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 11 }} interval="preserveStartEnd" />
-                     <YAxis domain={["dataMin - 10", "dataMax + 10"]} axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 11 }} orientation="left" />
+                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 8 }} interval="preserveStartEnd" />
+                     <YAxis domain={["dataMin - 5", "dataMax + 5"]} axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 8 }} orientation="left" />
                      <Tooltip
                         contentStyle={{
-                           backgroundColor: isDark ? "rgba(15, 20, 32, 0.85)" : "rgba(255, 255, 255, 0.95)",
+                           backgroundColor: isDark ? "rgba(15, 20, 32, 0.9)" : "rgba(255, 255, 255, 0.95)",
                            borderColor: isDark ? "rgba(255, 255, 255, 0.2)" : "rgba(226, 232, 240, 0.8)",
-                           borderRadius: "0.75rem",
-                           backdropFilter: "blur(12px)",
-                           fontSize: "12px",
+                           borderRadius: "0.5rem",
+                           fontSize: "10px",
+                           padding: "4px 8px",
                            color: isDark ? "#f8fafc" : "#0f172a",
-                           boxShadow: isDark ? "0 10px 25px -5px rgba(0, 0, 0, 0.5)" : "0 10px 25px -5px rgba(0, 0, 0, 0.1)",
                         }}
                         formatter={(value: any) => [`${formatPrice(Number(value))} IDR`, "Kurs"]}
                      />
-                     <Area type="monotone" dataKey="price" stroke={isPositive ? "#10b981" : "#f43f5e"} strokeWidth={2} fillOpacity={1} fill="url(#colorDynamic)" isAnimationActive={true} />
+                     <Area type="monotone" dataKey="price" stroke={isPositive ? "#10b981" : "#f43f5e"} strokeWidth={1.5} fillOpacity={1} fill="url(#colorDynamicParent)" isAnimationActive={true} />
                   </AreaChart>
                </ResponsiveContainer>
             </div>
 
-            {/* Panel Statistik */}
-            <div className={`border rounded-2xl p-4 flex flex-col justify-between space-y-3 text-xs backdrop-blur-md h-full shrink-0 ${isDark ? "bg-white/[0.04] border-white/15 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]" : "bg-slate-100/80 border-slate-200 shadow-sm"}`}>
-               <div className="flex justify-between items-center">
-                  <span className={isDark ? "text-slate-300/80" : "text-slate-500"}>Open</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(stats.open)}</span>
+            {/* Mini Stats Panel */}
+            <div className={`shrink-0 border rounded-xl p-1.5 grid grid-cols-4 gap-1 text-[8px] backdrop-blur-md relative z-10 text-center ${isDark ? "bg-white/[0.04] border-white/10" : "bg-slate-100/80 border-slate-200"}`}>
+               <div>
+                  <p className={isDark ? "text-slate-400" : "text-slate-500"}>Open</p>
+                  <p className="font-semibold truncate">{formatPrice(stats.open)}</p>
                </div>
-               <div className="flex justify-between items-center">
-                  <span className={isDark ? "text-slate-300/80" : "text-slate-500"}>High</span>
-                  <span className={`font-semibold ${isDark ? "text-white text-emerald-400" : "text-emerald-600"}`}>{formatPrice(stats.high)}</span>
+               <div>
+                  <p className={isDark ? "text-slate-400" : "text-slate-500"}>High</p>
+                  <p className="font-semibold truncate text-emerald-400">{formatPrice(stats.high)}</p>
                </div>
-               <div className="flex justify-between items-center">
-                  <span className={isDark ? "text-slate-300/80" : "text-slate-500"}>Low</span>
-                  <span className={`font-semibold ${isDark ? "text-white text-rose-400" : "text-rose-600"}`}>{formatPrice(stats.low)}</span>
+               <div>
+                  <p className={isDark ? "text-slate-400" : "text-slate-500"}>Low</p>
+                  <p className="font-semibold truncate text-rose-400">{formatPrice(stats.low)}</p>
                </div>
-               <div className="flex justify-between items-center">
-                  <span className={isDark ? "text-slate-300/80" : "text-slate-500"}>Prev Close</span>
-                  <span className={`font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(stats.prevClose)}</span>
-               </div>
-
-               <div className={`border-t pt-3 flex justify-between items-center ${isDark ? "border-white/15" : "border-slate-200"}`}>
-                  <span className={isDark ? "text-slate-300/80" : "text-slate-500"}>Update</span>
-                  <div className="flex items-center space-x-1.5">
-                     <RefreshCw className="w-3 h-3 text-emerald-400 animate-spin" />
-                     <span className={`font-semibold ${isDark ? "text-slate-200" : "text-slate-800"}`}>{lastUpdate || "--:--:--"}</span>
-                  </div>
+               <div>
+                  <p className={isDark ? "text-slate-400" : "text-slate-500"}>Prev</p>
+                  <p className="font-semibold truncate">{formatPrice(stats.prevClose)}</p>
                </div>
             </div>
          </div>
