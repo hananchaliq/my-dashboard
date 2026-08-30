@@ -7,12 +7,11 @@ import { useTheme } from "next-themes";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Settings } from "@/types";
 
-// ⚙️ KONFIGURASI SPOTIFY API
-const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35"; // Ganti dengan Client ID kamu
-const REDIRECT_URI = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+// ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
+const CLIENT_ID = "439dae06b7e84ea2a074d40242955f35";
 const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
-// Helper PKCE Generator
+// Helper PKCE Code Generator
 const generateRandomString = (length: number) => {
    const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
    const values = crypto.getRandomValues(new Uint8Array(length));
@@ -53,11 +52,17 @@ export default function SpotifyAndTradingWidget() {
    const { resolvedTheme, theme } = useTheme();
    const [isMounted, setIsMounted] = useState<boolean>(false);
 
+   // Getting origin URL dynamic & strip trailing slash if present
+   const getRedirectUri = () => {
+      if (typeof window === "undefined") return "https://manalist-dash.vercel.app/";
+      return window.location.origin.replace(/\/$/, "");
+   };
+
    // --- SPOTIFY REAL API STATES ---
    const [accessToken, setAccessToken] = useState<string | null>(null);
    const [playback, setPlayback] = useState<any>(null);
 
-   // 1. Tangkap Authorization Code & Tukar dengan Access Token (PKCE)
+   // 1. Tangkap Authorization Code & Exchange Token via PKCE
    useEffect(() => {
       setIsMounted(true);
 
@@ -77,7 +82,7 @@ export default function SpotifyAndTradingWidget() {
                         client_id: CLIENT_ID,
                         grant_type: "authorization_code",
                         code: code,
-                        redirect_uri: REDIRECT_URI,
+                        redirect_uri: getRedirectUri(),
                         code_verifier: codeVerifier,
                      }),
                   });
@@ -101,7 +106,7 @@ export default function SpotifyAndTradingWidget() {
       initAuth();
    }, []);
 
-   // Handler Login Redirect Menggunakan response_type=code + PKCE
+   // Handler Login Redirect dengan PKCE (response_type=code)
    const handleSpotifyLogin = async () => {
       const codeVerifier = generateRandomString(64);
       const hashed = await sha256(codeVerifier);
@@ -115,7 +120,8 @@ export default function SpotifyAndTradingWidget() {
          scope: SCOPES,
          code_challenge_method: "S256",
          code_challenge: codeChallenge,
-         redirect_uri: REDIRECT_URI,
+         redirect_uri: getRedirectUri(),
+         show_dialog: "true",
       });
 
       window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
@@ -128,7 +134,7 @@ export default function SpotifyAndTradingWidget() {
       setPlayback(null);
    };
 
-   // 2. Fetch Status Currently Playing dari Spotify API
+   // 2. Fetch Currently Playing Status secara Realtime
    const fetchCurrentlyPlaying = useCallback(async () => {
       if (!accessToken) return;
       try {
@@ -160,7 +166,7 @@ export default function SpotifyAndTradingWidget() {
       }
    }, [accessToken, fetchCurrentlyPlaying]);
 
-   // Remote Control Track via Spotify API
+   // Remote Control Track
    const controlPlayback = async (action: "play" | "pause" | "next" | "previous") => {
       if (!accessToken) return;
       const endpoints: Record<string, { url: string; method: string }> = {
@@ -306,7 +312,7 @@ export default function SpotifyAndTradingWidget() {
 
    return (
       <div className="w-full max-w-sm h-full flex flex-col gap-3 select-none">
-         {/* ================= CONTAINER 1 (ATAS): SPOTIFY REALTIME PLAYER ================= */}
+         {/* ================= SPOTIFY REALTIME PLAYER ================= */}
          <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
             {track?.album?.images[0]?.url && <div className="absolute inset-0 bg-cover bg-center opacity-25 blur-2xl pointer-events-none scale-125 transition-all duration-700" style={{ backgroundImage: `url(${track.album.images[0].url})` }} />}
 
@@ -371,7 +377,7 @@ export default function SpotifyAndTradingWidget() {
             )}
          </div>
 
-         {/* ================= CONTAINER 2 (BAWAH): TRADING CHART ================= */}
+         {/* ================= TRADING CHART ================= */}
          <div style={liquidGlassStyle} className={`relative group overflow-hidden p-3.5 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between space-y-2 ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
             {isLiquidEnabled && <div className={`absolute inset-x-0 top-0 h-1/2 pointer-events-none rounded-t-3xl ${isDark ? "bg-gradient-to-b from-white/10 to-transparent" : "bg-gradient-to-b from-white/60 to-transparent"}`} />}
 
