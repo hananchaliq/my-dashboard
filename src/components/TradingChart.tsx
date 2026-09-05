@@ -7,7 +7,7 @@ import { useTheme } from "next-themes";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Settings } from "@/types";
 
-// ⚙️ KONFIGURASI SPOTIFY API (Sesuai Dashboard Kamu)
+// ⚙️ KONFIGURASI SPOTIFY API
 const CLIENT_ID = "2632fa1328df49f58e2d24b2c269ed1d";
 const SCOPES = "streaming user-read-email user-read-private user-read-currently-playing user-read-playback-state user-modify-playback-state";
 
@@ -52,7 +52,6 @@ export default function SpotifyAndTradingWidget() {
    const { resolvedTheme, theme } = useTheme();
    const [isMounted, setIsMounted] = useState<boolean>(false);
 
-   // Getting origin URL dynamic & strip trailing slash if present
    const getRedirectUri = () => {
       if (typeof window === "undefined") return "https://manalist-dash.vercel.app/";
       return window.location.origin.replace(/\/$/, "");
@@ -62,7 +61,6 @@ export default function SpotifyAndTradingWidget() {
    const [accessToken, setAccessToken] = useState<string | null>(null);
    const [playback, setPlayback] = useState<any>(null);
 
-   // 1. Tangkap Authorization Code & Exchange Token via PKCE
    useEffect(() => {
       setIsMounted(true);
 
@@ -106,7 +104,6 @@ export default function SpotifyAndTradingWidget() {
       initAuth();
    }, []);
 
-   // Handler Login Redirect dengan PKCE (response_type=code)
    const handleSpotifyLogin = async () => {
       const codeVerifier = generateRandomString(64);
       const hashed = await sha256(codeVerifier);
@@ -134,12 +131,10 @@ export default function SpotifyAndTradingWidget() {
       setPlayback(null);
    };
 
-   // 2. Fetch Currently Playing Status secara Realtime
    const fetchCurrentlyPlaying = useCallback(async () => {
       if (!accessToken) return;
 
       try {
-         // Gunakan endpoint currently-playing bawaan yang mendukung akun Free & Premium
          const res = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
             headers: { Authorization: `Bearer ${accessToken}` },
          });
@@ -163,10 +158,10 @@ export default function SpotifyAndTradingWidget() {
          console.error("Fetch Error:", err);
       }
    }, [accessToken]);
+
    useEffect(() => {
       if (!accessToken) return;
 
-      // Cast window ke any agar TypeScript mengizinkan akses ke SDK Spotify
       const customWindow = window as any;
 
       customWindow.onSpotifyWebPlaybackSDKReady = () => {
@@ -191,7 +186,6 @@ export default function SpotifyAndTradingWidget() {
       };
    }, [accessToken]);
 
-   // Remote Control Track
    const controlPlayback = async (action: "play" | "pause" | "next" | "previous") => {
       if (!accessToken) return;
       const endpoints: Record<string, { url: string; method: string }> = {
@@ -293,7 +287,7 @@ export default function SpotifyAndTradingWidget() {
 
    if (!isMounted) {
       return (
-         <div className="w-full max-w-sm h-full min-h-[550px] flex flex-col gap-3">
+         <div className="w-full h-full min-h-[550px] flex flex-col gap-3">
             <div className="flex-1 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-900/50 animate-pulse" />
             <div className="flex-1 rounded-3xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-slate-900/50 animate-pulse" />
          </div>
@@ -336,13 +330,13 @@ export default function SpotifyAndTradingWidget() {
    };
 
    return (
-      <div className="w-full max-w-sm h-full flex flex-col gap-3 select-none">
+      <div className="w-full h-full flex flex-col gap-3 select-none">
          {/* ================= SPOTIFY REALTIME PLAYER ================= */}
-         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
+         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4.5 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
             {track?.album?.images[0]?.url && <div className="absolute inset-0 bg-cover bg-center opacity-25 blur-2xl pointer-events-none scale-125 transition-all duration-700" style={{ backgroundImage: `url(${track.album.images[0].url})` }} />}
 
             <div className="flex items-center justify-between shrink-0 relative z-10">
-               <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-black/20 border border-white/10 backdrop-blur-md">
+               <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-black/20 border border-white/10 backdrop-blur-md">
                   <Music className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="text-[10px] font-bold tracking-wider text-emerald-400">SPOTIFY CONNECTED</span>
                </div>
@@ -355,43 +349,43 @@ export default function SpotifyAndTradingWidget() {
             </div>
 
             {!accessToken ? (
-               <div className="flex-1 flex flex-col items-center justify-center space-y-3 relative z-10">
+               <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center space-y-3 relative z-10">
                   <p className="text-xs text-center opacity-70">Hubungkan widget ke akun Spotify kamu</p>
-                  <button onClick={handleSpotifyLogin} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-full transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
+                  <button onClick={handleSpotifyLogin} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-full transition-all shadow-lg shadow-emerald-500/20 active:scale-95">
                      Connect Spotify
                   </button>
                </div>
             ) : !track ? (
-               <div className="flex-1 flex flex-col items-center justify-center space-y-1 relative z-10 text-center">
+               <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center space-y-1 relative z-10 text-center">
                   <p className="text-xs font-semibold">Tidak ada lagu diputar</p>
                   <p className="text-[10px] opacity-60">Buka aplikasi Spotify di HP/PC & putar lagu</p>
                </div>
             ) : (
                <>
-                  <div className="flex items-center space-x-3 relative z-10 my-1">
-                     <img src={track.album.images[0]?.url} alt={track.name} className="w-14 h-14 rounded-2xl object-cover shadow-xl border border-white/10 shrink-0" />
+                  <div className="flex items-center space-x-3.5 relative z-10 my-2">
+                     <img src={track.album.images[0]?.url} alt={track.name} className="w-16 h-16 rounded-2xl object-cover shadow-xl border border-white/10 shrink-0" />
                      <div className="flex-1 min-w-0">
-                        <h3 className="text-xs font-bold truncate tracking-wide">{track.name}</h3>
-                        <p className={`text-[10px] truncate mt-0.5 ${isDark ? "text-slate-300/80" : "text-slate-600"}`}>{track.artists.map((a: any) => a.name).join(", ")}</p>
-                        <p className="text-[9px] truncate opacity-50 font-mono mt-0.5">{track.album.name}</p>
+                        <h3 className="text-sm font-bold truncate tracking-wide">{track.name}</h3>
+                        <p className={`text-xs truncate mt-0.5 ${isDark ? "text-slate-300/80" : "text-slate-600"}`}>{track.artists.map((a: any) => a.name).join(", ")}</p>
+                        <p className="text-[10px] truncate opacity-50 font-mono mt-0.5">{track.album.name}</p>
                      </div>
                   </div>
 
-                  <div className="space-y-1 relative z-10">
-                     <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden">
+                  <div className="space-y-1 relative z-10 my-1">
+                     <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
                         <div className="bg-emerald-400 h-full rounded-full transition-all duration-300" style={{ width: `${(progressMs / durationMs) * 100}%` }} />
                      </div>
-                     <div className="flex justify-between text-[9px] font-mono opacity-60">
+                     <div className="flex justify-between text-[10px] font-mono opacity-60">
                         <span>{formatMs(progressMs)}</span>
                         <span>{formatMs(durationMs)}</span>
                      </div>
                   </div>
 
-                  <div className="flex items-center justify-center space-x-4 relative z-10 shrink-0">
+                  <div className="flex items-center justify-center space-x-5 relative z-10 shrink-0 mt-1">
                      <button onClick={() => controlPlayback("previous")} className="hover:scale-110 active:scale-95 transition-all opacity-80">
                         <SkipBack className="w-4 h-4 fill-current" />
                      </button>
-                     <button onClick={() => controlPlayback(isPlaying ? "pause" : "play")} className="p-2.5 rounded-full bg-emerald-500 text-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-500/30">
+                     <button onClick={() => controlPlayback(isPlaying ? "pause" : "play")} className="p-3 rounded-full bg-emerald-500 text-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-emerald-500/30">
                         {isPlaying ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
                      </button>
                      <button onClick={() => controlPlayback("next")} className="hover:scale-110 active:scale-95 transition-all opacity-80">
@@ -403,12 +397,12 @@ export default function SpotifyAndTradingWidget() {
          </div>
 
          {/* ================= TRADING CHART ================= */}
-         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-3.5 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between space-y-2 ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
+         <div style={liquidGlassStyle} className={`relative group overflow-hidden p-4 rounded-3xl border transition-all duration-300 flex-1 flex flex-col justify-between space-y-2.5 ${isDark ? "border-white/15 text-white shadow-xl" : "border-slate-200/80 text-slate-900 shadow-md"}`}>
             {isLiquidEnabled && <div className={`absolute inset-x-0 top-0 h-1/2 pointer-events-none rounded-t-3xl ${isDark ? "bg-gradient-to-b from-white/10 to-transparent" : "bg-gradient-to-b from-white/60 to-transparent"}`} />}
 
             <div className="flex items-center justify-between shrink-0 relative z-10">
                <div className="flex items-center space-x-2">
-                  <div className={`flex items-center space-x-1.5 px-2 py-0.5 rounded-xl border backdrop-blur-md ${isDark ? "bg-white/10 border-white/15 text-white" : "bg-slate-100/90 border-slate-200 text-slate-900"}`}>
+                  <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl border backdrop-blur-md ${isDark ? "bg-white/10 border-white/15 text-white" : "bg-slate-100/90 border-slate-200 text-slate-900"}`}>
                      <TrendingUp className={`w-3.5 h-3.5 ${isPositive ? "text-emerald-400" : "text-rose-400"}`} />
                      <h2 className="text-xs font-bold tracking-wide">USD/IDR</h2>
                   </div>
@@ -424,21 +418,21 @@ export default function SpotifyAndTradingWidget() {
             </div>
 
             <div className="shrink-0 flex items-baseline space-x-1 relative z-10">
-               {isLoading ? <span className="text-lg font-bold text-slate-400 animate-pulse">Memuat...</span> : <span className={`text-lg font-bold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(currentPrice)}</span>}
+               {isLoading ? <span className="text-xl font-bold text-slate-400 animate-pulse">Memuat...</span> : <span className={`text-xl font-bold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>{formatPrice(currentPrice)}</span>}
                <span className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>IDR</span>
             </div>
 
-            <div className={`flex-1 min-h-[80px] w-full rounded-xl p-1 border backdrop-blur-md relative z-10 ${isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100/60 border-slate-200"}`}>
+            <div className={`flex-1 min-h-[90px] w-full rounded-xl p-1 border backdrop-blur-md relative z-10 ${isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-100/60 border-slate-200"}`}>
                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data} margin={{ top: 2, right: 2, left: -25, bottom: 0 }}>
+                  <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                      <defs>
                         <linearGradient id="colorDynamicParent" x1="0" y1="0" x2="0" y2="1">
                            <stop offset="5%" stopColor={isPositive ? "#10b981" : "#f43f5e"} stopOpacity={0.4} />
                            <stop offset="95%" stopColor={isPositive ? "#10b981" : "#f43f5e"} stopOpacity={0.0} />
                         </linearGradient>
                      </defs>
-                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 8 }} interval="preserveStartEnd" />
-                     <YAxis domain={["dataMin - 5", "dataMax + 5"]} axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 8 }} orientation="left" />
+                     <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 9 }} interval="preserveStartEnd" />
+                     <YAxis domain={["dataMin - 5", "dataMax + 5"]} axisLine={false} tickLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b", fontSize: 9 }} orientation="left" />
                      <Tooltip
                         contentStyle={{
                            backgroundColor: isDark ? "rgba(15, 20, 32, 0.9)" : "rgba(255, 255, 255, 0.95)",
@@ -455,22 +449,22 @@ export default function SpotifyAndTradingWidget() {
                </ResponsiveContainer>
             </div>
 
-            <div className={`shrink-0 border rounded-xl p-1.5 grid grid-cols-4 gap-1 text-[8px] backdrop-blur-md relative z-10 text-center ${isDark ? "bg-white/[0.04] border-white/10" : "bg-slate-100/80 border-slate-200"}`}>
+            <div className={`shrink-0 border rounded-xl p-2 grid grid-cols-4 gap-1 text-[9px] backdrop-blur-md relative z-10 text-center ${isDark ? "bg-white/[0.04] border-white/10" : "bg-slate-100/80 border-slate-200"}`}>
                <div>
                   <p className={isDark ? "text-slate-400" : "text-slate-500"}>Open</p>
-                  <p className="font-semibold truncate">{formatPrice(stats.open)}</p>
+                  <p className="font-semibold truncate mt-0.5">{formatPrice(stats.open)}</p>
                </div>
                <div>
                   <p className={isDark ? "text-slate-400" : "text-slate-500"}>High</p>
-                  <p className="font-semibold truncate text-emerald-400">{formatPrice(stats.high)}</p>
+                  <p className="font-semibold truncate text-emerald-400 mt-0.5">{formatPrice(stats.high)}</p>
                </div>
                <div>
                   <p className={isDark ? "text-slate-400" : "text-slate-500"}>Low</p>
-                  <p className="font-semibold truncate text-rose-400">{formatPrice(stats.low)}</p>
+                  <p className="font-semibold truncate text-rose-400 mt-0.5">{formatPrice(stats.low)}</p>
                </div>
                <div>
                   <p className={isDark ? "text-slate-400" : "text-slate-500"}>Prev</p>
-                  <p className="font-semibold truncate">{formatPrice(stats.prevClose)}</p>
+                  <p className="font-semibold truncate mt-0.5">{formatPrice(stats.prevClose)}</p>
                </div>
             </div>
          </div>

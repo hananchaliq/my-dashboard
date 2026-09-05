@@ -94,12 +94,12 @@ export default function Home() {
                         </div>
                      </div>
 
-                     {/* Baris Tengah: Catatan Harian & Trading Chart */}
-                     <div className="grid grid-cols-12 gap-4 items-stretch">
-                        <div className="col-span-12 lg:col-span-5 h-full">
+                     {/* Baris Tengah: Rasio 3/5 (Kiri) dan 2/5 (Kanan) */}
+                     <div className="flex flex-col lg:flex-row gap-4 items-stretch w-full">
+                        <div className="w-full lg:flex-[3] min-w-0">
                            <DailyNotes />
                         </div>
-                        <div className="col-span-12 lg:col-span-7 h-full">
+                        <div className="w-full lg:flex-[2] min-w-0">
                            <TradingChart />
                         </div>
                      </div>
@@ -117,11 +117,7 @@ export default function Home() {
          </motion.div>
 
          {/* Drawer Overlay Settings */}
-         <SettingsOverlay
-            isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
-            onSave={(updated: Settings) => setSettings(updated)}
-         />
+         <SettingsOverlay isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onSave={(updated: Settings) => setSettings(updated)} />
       </main>
    );
 }
